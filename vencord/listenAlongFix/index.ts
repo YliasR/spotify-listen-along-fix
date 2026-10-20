@@ -8,7 +8,8 @@
  * the companion Spicetify extension can play the track through the local player.
  */
 
-import definePlugin, { PluginNative } from "@utils/types";
+import { definePluginSettings } from "@api/Settings";
+import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { findStoreLazy } from "@webpack";
 import { PresenceStore } from "@webpack/common";
 
@@ -27,11 +28,40 @@ const SpotifyStore = findStoreLazy("SpotifyStore") as {
     getSyncingWith(): SyncingWith | null | undefined;
 };
 
+const settings = definePluginSettings({
+    graceSeconds: {
+        type: OptionType.NUMBER,
+        description: "How long to keep waiting for the host after their Spotify activity disappears (seconds)",
+        default: 20
+    }
+});
+
 const POLL_MS = 1000;
 
+/** The session we're following, kept alive after Discord drops it. */
+interface Session {
+    id: string;
+    userId: string;
+    trackId: string;
+    startTime: number;
+    /** epoch ms when the host's activity disappeared, null while visible */
+    hostLostAt: number | null;
+    /** Discord stopped syncing because the host vanished; we keep following */
+    detached: boolean;
+}
+
 let interval: ReturnType<typeof setInterval> | null = null;
-let currentSession: string | null = null;
+let session: Session | null = null;
 let lastPayload = "";
+
+const INACTIVE = (): ListenAlongState => ({
+    active: false,
+    sessionId: null,
+    trackId: null,
+    startTime: null,
+    hostPlaying: false,
+    updatedAt: Date.now()
+});
 
 function findHostActivity(userId: string) {
     return PresenceStore.getActivities(userId)
@@ -41,33 +71,56 @@ function findHostActivity(userId: string) {
 function buildState(): ListenAlongState {
     const sync = SpotifyStore.getSyncingWith?.();
 
-    if (!sync) {
-        currentSession = null;
-        return {
-            active: false,
-            sessionId: null,
-            trackId: null,
-            startTime: null,
-            hostPlaying: false,
-            updatedAt: Date.now()
-        };
+    if (sync) {
+        // New session whenever we start following someone else
+        if (session?.userId !== sync.userId) {
+            session = {
+                id: `${sync.userId}:${Date.now()}`,
+                userId: sync.userId,
+                trackId: sync.trackId,
+                startTime: sync.startTime,
+                hostLostAt: null,
+                detached: false
+            };
+        }
+        session.detached = false;
+    } else if (session && !session.detached) {
+        // Discord ended Listen Along. If the host is still playing, the user
+        // stopped it on purpose. If the host vanished, Discord gave up on its
+        // own, so we keep following them ourselves.
+        if (findHostActivity(session.userId)) session = null;
+        else session.detached = true;
     }
 
-    // New session whenever we start following someone (or switch party)
-    const key = `${sync.userId}:${sync.partyId}`;
-    if (!currentSession?.startsWith(key + ":"))
-        currentSession = `${key}:${Date.now()}`;
+    if (!session) return INACTIVE();
 
     // Presence is usually fresher than Discord's cached sync info
-    const host = findHostActivity(sync.userId);
+    const host = findHostActivity(session.userId);
+    const now = Date.now();
+
+    if (host?.sync_id) {
+        session.hostLostAt = null;
+        session.trackId = host.sync_id;
+        session.startTime = host.timestamps?.start != null ? Number(host.timestamps.start) : session.startTime;
+    } else if (sync) {
+        session.trackId = sync.trackId;
+        session.startTime = sync.startTime;
+        session.hostLostAt ??= now;
+    } else {
+        session.hostLostAt ??= now;
+        if (now - session.hostLostAt > settings.store.graceSeconds * 1000) {
+            session = null;
+            return INACTIVE();
+        }
+    }
 
     return {
         active: true,
-        sessionId: currentSession,
-        trackId: host?.sync_id ?? sync.trackId,
-        startTime: host?.timestamps?.start != null ? Number(host.timestamps.start) : sync.startTime,
-        hostPlaying: host != null,
-        updatedAt: Date.now()
+        sessionId: session.id,
+        trackId: session.trackId,
+        startTime: session.startTime,
+        hostPlaying: session.hostLostAt == null,
+        updatedAt: now
     };
 }
 
@@ -89,9 +142,11 @@ export default definePlugin({
     name: "ListenAlongFix",
     description: "Makes Spotify Listen Along work with the desktop app (needs the ListenAlongFix Spicetify extension)",
     authors: [{ name: "mystic", id: 0n }],
+    settings,
 
     start() {
         Native.startServer();
+        session = null;
         lastPayload = "";
         tick();
         interval = setInterval(tick, POLL_MS);
@@ -100,14 +155,8 @@ export default definePlugin({
     stop() {
         if (interval) clearInterval(interval);
         interval = null;
-        Native.setState({
-            active: false,
-            sessionId: null,
-            trackId: null,
-            startTime: null,
-            hostPlaying: false,
-            updatedAt: Date.now()
-        });
+        session = null;
+        Native.setState(INACTIVE());
         Native.stopServer();
     }
 });
