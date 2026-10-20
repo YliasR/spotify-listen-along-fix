@@ -49,6 +49,22 @@ Use `-SkipVencord` or `-SkipSpicetify` to redo only one half.
 - **Spotify update**: if Spicetify got wiped, run `pwsh ./install.ps1 -SkipVencord`.
 - Discord updates are fine, since Vencord re-patches itself.
 
+## What can break it
+
+Every failure mode is graceful: Listen Along just stops working, nothing else is affected.
+
+| Cause | Likelihood | Symptom / fix |
+|---|---|---|
+| Spotify update breaks Spicetify | Most common | Wait for a Spicetify update, then `pwsh ./install.ps1 -SkipVencord` |
+| Discord renames `SpotifyStore.getSyncingWith()` or changes Spotify activity data | Low (stable for years, Discord's own Listen Along uses it) | `/state` never shows `active: true`; plugin needs updating |
+| Vencord changes its plugin API | Low | `install.ps1` fails at build time, before touching your installed Vencord |
+| Spotify fixes the original bug | - | Harmless (both paths play the same track); uninstall if you like |
+
+To see which side broke, open `http://127.0.0.1:32145/state` during Listen Along:
+
+- If it doesn't load, or `active` stays `false`, the Discord/Vencord side broke.
+- If `active` is `true` but nothing plays, the Spotify/Spicetify side broke.
+
 ## Uninstall
 
 1. Restore a `dist.backup-*` folder over `%APPDATA%\Vencord\dist`, or reinstall Vencord with the official installer.
