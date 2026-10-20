@@ -124,6 +124,8 @@ function installVencord() {
     step("Building Vencord (this takes a minute)");
     // Use the pnpm version Vencord pins, no global install needed
     const pm = JSON.parse(readFileSync(join(src, "package.json"), "utf8")).packageManager;
+    // Passed through a shell on Windows, so only accept a plain pnpm version
+    if (!/^pnpm@\d+\.\d+\.\d+$/.test(pm ?? "")) fail(`unexpected packageManager in Vencord's package.json: ${pm}`);
     run("npx", ["-y", pm, "install", "--frozen-lockfile"], { cwd: src });
     // --standalone matches the official installer: the in-app updater uses
     // GitHub releases instead of expecting a git checkout next to dist
