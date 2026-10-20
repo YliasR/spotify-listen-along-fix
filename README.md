@@ -1,6 +1,6 @@
 # spotify-listen-along-fix
 
-Makes Discord's **Spotify Listen Along** work again with the Spotify **desktop app**.
+Makes Discord's **Spotify Listen Along** work again with the Spotify **desktop app**. Works on Windows, macOS and Linux.
 
 ## The problem
 
@@ -21,32 +21,50 @@ If you change the track or pause manually, the extension stops following until t
 
 ## Requirements
 
-- Windows, Discord desktop with [Vencord](https://vencord.dev) installed
+- Discord desktop with [Vencord](https://vencord.dev) installed (official installer)
 - Spotify desktop with [Spicetify](https://spicetify.app)
 - Spotify Premium (Discord requires it for Listen Along)
-- git and Node.js 20+
+- [git](https://git-scm.com) and [Node.js](https://nodejs.org) 22+
+
+Only the person clicking *Listen Along* needs this. The friend you listen along with doesn't.
 
 ## Install
 
-```powershell
+```sh
 git clone https://github.com/YliasR/spotify-listen-along-fix
 cd spotify-listen-along-fix
-pwsh ./install.ps1
+node install.mjs
 ```
 
-The script:
+Don't use `sudo`. The script:
 
 1. Clones Vencord into `.vencord-src` and builds it with the plugin (Vencord userplugins must be built from source)
-2. Closes Discord, backs up `%APPDATA%\Vencord\dist` to `dist.backup-<timestamp>`, and installs the new build
+2. Closes Discord, backs up Vencord's `dist` folder to `dist.backup-<timestamp>`, and installs the new build
 3. Enables `ListenAlongFix` in Vencord's `settings.json` (backup saved as `settings.json.bak`)
 4. Installs and enables the Spicetify extension, then runs `spicetify backup apply`
 
-Use `-SkipVencord` or `-SkipSpicetify` to redo only one half.
+Use `--skip-vencord` or `--skip-spicetify` to redo only one half.
+
+### Platform notes
+
+| | Vencord folder | Notes |
+|---|---|---|
+| Windows | `%APPDATA%\Vencord` | |
+| macOS | `~/Library/Application Support/Vencord` | |
+| Linux | `~/.config/Vencord` | Flatpak Discord (`~/.var/app/com.discordapp.Discord/config/Vencord`) is detected too. Spotify from Snap isn't supported by Spicetify; use Flatpak, AUR or the .deb. Discord isn't restarted automatically if `discord` isn't on your PATH. |
+
+If your Vencord lives somewhere else, point the script at it:
+
+```sh
+VENCORD_USER_DATA_DIR=/path/to/Vencord node install.mjs
+```
+
+Vesktop isn't supported, since it ships its own Vencord build.
 
 ### Re-run after updates
 
-- **Vencord update**: the official updater replaces the build and drops the plugin. Re-run `install.ps1`.
-- **Spotify update**: if Spicetify got wiped, run `pwsh ./install.ps1 -SkipVencord`.
+- **Vencord update**: the in-app updater installs the official build, which doesn't include the plugin. Re-run `node install.mjs`.
+- **Spotify update**: if Spicetify got wiped, run `node install.mjs --skip-vencord`.
 - Discord updates are fine, since Vencord re-patches itself.
 
 ## What can break it
@@ -55,9 +73,9 @@ Every failure mode is graceful: Listen Along just stops working, nothing else is
 
 | Cause | Likelihood | Symptom / fix |
 |---|---|---|
-| Spotify update breaks Spicetify | Most common | Wait for a Spicetify update, then `pwsh ./install.ps1 -SkipVencord` |
+| Spotify update breaks Spicetify | Most common | Wait for a Spicetify update, then `node install.mjs --skip-vencord` |
 | Discord renames `SpotifyStore.getSyncingWith()` or changes Spotify activity data | Low (stable for years, Discord's own Listen Along uses it) | `/state` never shows `active: true`; plugin needs updating |
-| Vencord changes its plugin API | Low | `install.ps1` fails at build time, before touching your installed Vencord |
+| Vencord changes its plugin API | Low | The install fails at build time, before touching your installed Vencord |
 | Spotify fixes the original bug | - | Harmless (both paths play the same track); uninstall if you like |
 
 To see which side broke, open `http://127.0.0.1:32145/state` during Listen Along:
@@ -67,14 +85,14 @@ To see which side broke, open `http://127.0.0.1:32145/state` during Listen Along
 
 ## Uninstall
 
-1. Restore a `dist.backup-*` folder over `%APPDATA%\Vencord\dist`, or reinstall Vencord with the official installer.
+1. Click **Update** in Vencord's Updater tab, or reinstall Vencord with the official installer. You can also restore a `dist.backup-*` folder over `dist`.
 2. Run `spicetify config extensions listenAlongFix.js-` then `spicetify apply`.
 
 ## Troubleshooting
 
-- **Spotify DevTools** (`spicetify enable-devtools`, then Ctrl+Shift+I): look for `[ListenAlongFix]` logs.
-- **Endpoint check**: open `http://127.0.0.1:32145/state` in a browser while Discord is running. `active` should become `true` after clicking Listen Along.
-- **Discord console** (Ctrl+Shift+I): errors are prefixed with `[ListenAlongFix]`.
+- **Spotify DevTools** (`spicetify enable-devtools`, then Ctrl/Cmd+Shift+I): look for `[ListenAlongFix]` logs.
+- **Discord console** (Ctrl/Cmd+Shift+I): errors are prefixed with `[ListenAlongFix]`.
+- **Port 32145 in use**: change `PORT` in `vencord/listenAlongFix/native.ts` and `BRIDGE_URL` in `spicetify/listenAlongFix.js`, then re-run the installer.
 
 ## License
 
