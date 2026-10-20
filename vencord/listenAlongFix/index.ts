@@ -30,9 +30,11 @@ const SpotifyStore = findStoreLazy("SpotifyStore") as {
 
 const settings = definePluginSettings({
     graceSeconds: {
-        type: OptionType.NUMBER,
+        type: OptionType.SLIDER,
         description: "How long to keep waiting for the host after their Spotify activity disappears (seconds)",
-        default: 20
+        default: 20,
+        markers: [0, 5, 10, 20, 30, 45, 60, 90, 120],
+        stickToMarkers: true
     }
 });
 
