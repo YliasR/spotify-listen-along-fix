@@ -69,7 +69,9 @@ if (-not $SkipVencord) {
     Push-Location $Src
     try {
         Invoke-Native npx @("-y", $pm, "install", "--frozen-lockfile")
-        Invoke-Native npx @("-y", $pm, "build")
+        # --standalone matches the official installer: the in-app updater uses
+        # GitHub releases instead of expecting a git checkout next to dist
+        Invoke-Native npx @("-y", $pm, "build", "--standalone")
     } finally {
         Pop-Location
     }
