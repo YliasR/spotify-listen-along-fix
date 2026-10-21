@@ -11,7 +11,7 @@
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { findStoreLazy } from "@webpack";
-import { PresenceStore } from "@webpack/common";
+import { FluxDispatcher, PresenceStore } from "@webpack/common";
 
 import type { ListenAlongState } from "./native";
 
@@ -39,6 +39,8 @@ const settings = definePluginSettings({
 });
 
 const POLL_MS = 1000;
+// Discord stops Listen Along 5s after playback mismatches, so don't retry faster
+const REJOIN_COOLDOWN_MS = 6000;
 
 /** The session we're following, kept alive after Discord drops it. */
 interface Session {
@@ -68,6 +70,21 @@ const INACTIVE = (): ListenAlongState => ({
 function findHostActivity(userId: string) {
     return PresenceStore.getActivities(userId)
         ?.find(a => a.sync_id != null && a.party?.id?.startsWith("spotify:"));
+}
+
+let lastRejoinAt = -Infinity;
+
+/**
+ * Re-join Discord's Listen Along once the host is back, so Discord's own
+ * "Listening along" UI returns. This is the same event the Listen Along
+ * button dispatches. Discord also re-sends its (ignored) remote play command,
+ * which is harmless.
+ */
+function rejoin(userId: string, activity: unknown) {
+    const now = Date.now();
+    if (now - lastRejoinAt < REJOIN_COOLDOWN_MS) return;
+    lastRejoinAt = now;
+    FluxDispatcher.dispatch({ type: "ACTIVITY_SYNC", activity, userId });
 }
 
 function buildState(): ListenAlongState {
@@ -104,6 +121,7 @@ function buildState(): ListenAlongState {
         session.hostLostAt = null;
         session.trackId = host.sync_id;
         session.startTime = host.timestamps?.start != null ? Number(host.timestamps.start) : session.startTime;
+        if (session.detached && !sync) rejoin(session.userId, host);
     } else if (sync) {
         session.trackId = sync.trackId;
         session.startTime = sync.startTime;

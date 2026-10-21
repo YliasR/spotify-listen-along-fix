@@ -19,7 +19,7 @@ Discord (Listen Along state) ──► Vencord plugin ──► http://127.0.0.1
 
 If you change the track or pause manually, the extension stops following until the next Listen Along session. Nothing leaves your machine.
 
-If the host stops playing for a moment, Discord ends Listen Along on its own. The plugin keeps following the host for a grace period (default 20 s) and picks them back up when they play again. To change how long the session stays alive, open **Discord Settings → Vencord → Plugins → ListenAlongFix → Settings** and adjust the **graceSeconds** slider. Discord's UI won't show you as listening along during that time, so to stop following, pause or skip in Spotify.
+If the host stops playing for a moment, Discord ends Listen Along on its own. The plugin keeps following the host for a grace period (default 20 s, configurable in the plugin settings) and re-joins Discord's Listen Along when they play again, so the "Listening along" indicator comes back.
 
 ## Requirements
 
